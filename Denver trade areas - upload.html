@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Denver Trade Areas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: ranked list + site detail in a left rail, full-height map on the right; stacks on phones */
+:root{
+  --bg:#f5f7f8; --panel:#ffffff; --fg:#17242b; --muted:#5c6b73; --line:#dde3e6;
+  --accent:#0f6e7a; --accent-soft:#e2f0f1; --warn:#a85a12;
+  --s0:#cfe8e4; --s1:#8fc9c2; --s2:#4fa39d; --s3:#1f7a7d; --s4:#0b4f5c;
+  --ring:#0f6e7a;
+  --font-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1619; --panel:#151f23; --fg:#e4ecef; --muted:#93a4ab; --line:#26343a;
+  --accent:#5cc3c4; --accent-soft:#18363a; --warn:#e3a35b;
+  --s0:#1d3b3d; --s1:#23605f; --s2:#2f8c88; --s3:#52b9b0; --s4:#9ee3d6;
+  --ring:#5cc3c4; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1619; --panel:#151f23; --fg:#e4ecef; --muted:#93a4ab; --line:#26343a;
+  --accent:#5cc3c4; --accent-soft:#18363a; --warn:#e3a35b;
+  --s0:#1d3b3d; --s1:#23605f; --s2:#2f8c88; --s3:#52b9b0; --s4:#9ee3d6;
+  --ring:#5cc3c4; color-scheme:dark}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--font-body)}
+.app{display:grid;grid-template-columns:380px 1fr;height:100%}
+.rail{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.head{padding:16px 18px 12px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+h1{font-size:18px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:12.5px;margin:0}
+.controls{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+label.ctl{display:grid;gap:4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+select{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:600 12.5px var(--font-num);padding:6px 10px;border:0;background:var(--bg);color:var(--muted);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--panel)}
+button:focus-visible,select:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.legend .bar{display:flex;height:10px;border-radius:4px;overflow:hidden;flex:0 0 140px}
+.legend .bar i{flex:1}
+.scroll{overflow:auto;flex:1;min-height:0}
+.list{list-style:none;margin:0;padding:6px 0}
+.row{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;padding:8px 18px;cursor:pointer}
+.row:hover{background:var(--accent-soft)}
+.row[aria-current="true"]{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.rank{font:600 11px var(--font-num);color:var(--muted);text-align:right}
+.nm{min-width:0}.nm b{display:block;font-weight:600;font-size:13.5px}
+.nm span{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.val{font:600 13px var(--font-num);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:8px}
+.dot{width:13px;height:13px;border-radius:50%;box-shadow:0 0 0 1.5px var(--panel),0 0 0 2.5px var(--line)}
+.detail{border-top:1px solid var(--line);padding:14px 18px 18px;display:grid;gap:10px}
+.detail h2{font-size:15px;margin:0}
+.detail .x{font-size:12px;color:var(--muted)}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:5px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;color:var(--muted);font-weight:500}
+thead th{font:600 11px var(--font-num);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+td{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+td.hl{color:var(--accent);font-weight:600}
+tr.sec td{border-bottom:0;padding-top:10px;font:600 10.5px var(--font-body);text-transform:uppercase;letter-spacing:.07em;color:var(--fg)}
+.flag{font-size:12px;color:var(--warn)}
+.empty{color:var(--muted);font-size:13px}
+.mapwrap{position:relative;height:100%;min-width:0}
+.citylbl{cursor:pointer;font:700 11px var(--font-body);letter-spacing:.06em;text-transform:uppercase;color:#2b3338;background:rgba(255,255,255,.9);padding:2px 6px;border-radius:3px;white-space:nowrap;border:1px solid #2b3338}
+.chip{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg);border:1px solid var(--fg);border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:1px}
+.match{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mt{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;gap:4px;position:relative}
+.mt span{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.mt b{font:600 20px var(--font-num);color:var(--accent)}
+.mt small{font-size:12px;color:var(--muted);font-weight:400}
+.mt i{display:block;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent) var(--w),var(--line) var(--w))}
+.whys{display:grid;gap:8px}
+.why{border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.why summary{cursor:pointer;font-weight:600;font-size:12.5px;color:var(--fg);padding:2px 0}
+.why summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.why ul{list-style:none;margin:6px 0 2px;padding:0;display:grid;gap:6px}
+.why li{display:grid;grid-template-columns:14px 1fr;gap:6px;align-items:start;font-size:12px}
+.why li b{display:block;font-weight:600}
+.why li small{display:block;color:var(--muted);font-family:var(--font-num);font-size:11px;font-variant-numeric:tabular-nums}
+.why .g{font-size:10px;line-height:18px;text-align:center}
+.why .d1 .g{color:var(--accent)} .why .d-1 .g{color:var(--warn)} .why .d0 .g{color:var(--muted)}
+.pop .ptitle{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-top:4px}
+.pop .why{padding:4px 8px}
+.pop .why ul{max-height:220px;overflow:auto}
+.cmp summary{cursor:pointer;font-size:12.5px;color:var(--accent);font-weight:600}
+.cmp table{margin-top:6px}
+.pop{display:grid;gap:6px;min-width:230px}
+.pop .pn{font-size:14px}
+.pop .px{font-size:12px;color:var(--fg)}
+.pop .px span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.pop table{font-size:12px}
+.pop td,.pop th{padding:4px 5px}
+.pop .na{color:var(--muted);font-family:var(--font-body);font-size:11px}
+.pop .pnote{font-size:11px;color:var(--muted)}
+.wage td small{color:var(--muted);font-size:10.5px}
+.wage{min-width:300px}
+.leaflet-popup-content{margin:12px 14px}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted)}
+#map{height:100%;background:var(--bg)}
+.tilewarn{position:absolute;left:12px;right:12px;bottom:28px;z-index:1000;background:var(--panel);color:var(--fg);border:1px solid var(--warn);border-radius:8px;padding:10px 12px;font-size:13px;max-width:460px}
+.leaflet-control-layers{background:var(--panel)!important;color:var(--fg)!important;border:1px solid var(--line)!important;font-size:12.5px}
+.sitelbl{font:600 11px var(--font-body);color:#17242b;background:rgba(255,255,255,.92);padding:1px 5px;border-radius:3px;white-space:nowrap;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+.leaflet-container{font-family:var(--font-body)}
+.leaflet-tooltip.tt{background:var(--panel);color:var(--fg);border:1px solid var(--line);box-shadow:none;font-size:12px;padding:4px 8px}
+.leaflet-tooltip.tt:before{display:none}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--fg)}
+.leaflet-control-attribution{background:color-mix(in srgb,var(--panel) 85%,transparent)!important;color:var(--muted)!important}
+.leaflet-control-attribution a{color:var(--accent)!important}
+.leaflet-bar a{background:var(--panel);color:var(--fg);border-color:var(--line)}
+.ringlbl{font:600 10px var(--font-num);color:var(--ring);background:var(--panel);padding:0 4px;border-radius:3px;white-space:nowrap;border:1px solid var(--line)}
+@media (max-width:820px){
+  html,body{height:auto}
+  .app{grid-template-columns:1fr;height:auto}
+  .mapwrap{height:65vh;order:-1}
+  .rail{border-right:0;overflow:visible}
+  .scroll{overflow:visible}
+  .head,.row,.detail{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="head">
+      <div>
+        <h1>Denver Metro Trade Areas</h1>
+        <p class="sub">14 sites · Esri 2026 estimates via Sullivan Hayes reports</p>
+      </div>
+      <div class="controls">
+        <label class="ctl" for="metric">Rank by
+          <select id="metric">
+            <option value="medInc">Median household income</option>
+            <option value="avgInc">Average household income</option>
+            <option value="perCap">Per capita income</option>
+            <option value="pop">2026 population</option>
+            <option value="hh">2026 households</option>
+            <option value="growth">Annual pop. growth 2026–31</option>
+            <option value="degree">Bachelor's + graduate degrees</option>
+            <option value="emp">Daytime employees</option>
+            <option value="medAge">Median age</option>
+            <option value="matchDP">Match: Des Peres, MO</option>
+            <option value="matchSH">Match: Sunset Hills, MO</option>
+            <option value="matchCL">Match: Clayton, MO</option>
+          </select>
+        </label>
+        <div class="ctl" style="display:grid;gap:4px">
+          <span class="ctl" id="radlbl">Radius</span>
+          <div class="seg" role="group" aria-labelledby="radlbl" id="radius">
+            <button type="button" data-r="1" aria-pressed="false">1 mi</button>
+            <button type="button" data-r="2" aria-pressed="false">2 mi</button>
+            <button type="button" data-r="3" aria-pressed="true">3 mi</button>
+          </div>
+        </div>
+      </div>
+      <div class="legend"><span>Low</span><span class="bar" style="background:linear-gradient(90deg,#2166ac,#d7191c)"></span><span>High</span><span style="margin-left:auto">Click a site for details</span></div>
+    </div>
+    <div class="scroll">
+      <ol class="list" id="list"></ol>
+      <section class="detail" id="detail" aria-live="polite"><p class="empty">Select a site on the map or in the list to see its 1, 2 and 3 mile demographics.</p></section>
+    </div>
+  </aside>
+  <div class="mapwrap">
+    <div id="map" role="region" aria-label="Map of trade areas"></div>
+    <div id="tilewarn" class="tilewarn" hidden><b>The street map isn't loading here.</b> Download this file and open it in Chrome or Safari. App previews block outside map images, so only the circles show.</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// Fields: pop26, pop31, growth%, hh26, medAge, avgInc, medInc, perCap, bach, grad, emp, biz
+const F=["pop","pop31","growth","hh","medAge","avgInc","medInc","perCap","bach","grad","emp","biz"];
+const SITES=[
+ {id:"cherry",county:"Denver",name:"Cherry Creek",x:"1st Ave & Steele St",lat:39.7179,lng:-104.9506,r:{1:[18897,19847,0.99,9740,46.4,243284,179613,128519,6387,6435,30039,2313],2:[115890,120179,0.73,64195,36.5,170795,103756,94659,41709,30848,97654,6903],3:[242433,255685,1.07,125989,36.0,167604,105601,87441,82899,58752,265772,16358]}},
+ {id:"denwest",county:"Jefferson County",name:"Denver West / Applewood",x:"32nd Ave & Youngfield St",lat:39.7620,lng:-105.1404,r:{1:[9625,9750,0.26,3901,46.1,208180,165693,83925,2911,1966,4208,400],2:[30793,31765,0.62,13092,43.5,169706,122551,72170,8787,5269,23203,1875],3:[70449,73380,0.82,30486,41.2,145597,104463,63371,18374,10902,58223,4382]}},
+ {id:"dtn",county:"Denver",name:"Downtown / Highlands",x:"20th St & Chestnut Pl",lat:39.7588,lng:-105.0052,r:{1:[44058,47044,1.32,26965,32.9,159033,117663,97538,19420,9400,102227,5585],2:[146081,161011,1.97,81162,33.4,146621,101777,81646,54210,28274,220716,11942],3:[252796,273595,1.59,133345,34.2,150453,102586,79568,88079,49652,287475,16442]}},
+ {id:"hampden",county:"Denver",name:"Hampden / I-25",x:"Hampden Ave & Tamarac Dr",lat:39.6533,lng:-104.8963,r:{1:[20285,20293,0.01,9551,39.9,134420,83896,64144,5870,4163,9520,849],2:[72469,74497,0.55,34436,36.5,129642,85228,61391,19321,12736,54140,3751],3:[137323,140230,0.42,63494,37.4,138620,90716,64025,36166,24572,125497,8483]}},
+ {id:"hrwest",county:"Douglas County",name:"Highlands Ranch West",x:"Highlands Ranch Pkwy & Kendrick Castillo Way",lat:39.5430,lng:-105.0130,approx:true,
+  flag:"The report's 1-mile population (12,546) is identical to the Highlands Ranch / University report. One of the two may be a copy error; confirm with the broker.",
+  r:{1:[12546,13763,1.87,5795,40.7,174067,138258,81739,3835,2490,13237,794],2:[49425,51837,0.96,19915,42.8,190640,151795,77218,14913,9419,34469,2172],3:[85923,89437,0.80,34261,43.0,195013,152952,77848,26047,16995,46138,2987]}},
+ {id:"hruniv",county:"Douglas County",name:"Highlands Ranch",x:"Highlands Ranch Pkwy & University Blvd",lat:39.5437,lng:-104.9592,r:{1:[12546,12791,0.39,4607,44.7,226895,187634,83832,4209,2602,5083,357],2:[58570,59906,0.45,21191,41.1,213067,172383,77074,17291,11517,18271,973],3:[105705,108267,0.48,39249,41.4,209414,164895,78113,31642,20511,49422,2985]}},
+ {id:"lonetree",county:"Douglas County",name:"Lone Tree",x:"Lincoln Ave & Yosemite St",lat:39.5395,lng:-104.8845,r:{1:[14333,16566,2.94,6892,35.3,165788,117789,77600,4455,3113,22835,1068],2:[33780,37264,1.98,14687,37.4,169193,124594,73311,10078,6112,45277,2292],3:[66973,72022,1.46,28128,38.3,184407,139661,77267,19846,13279,79180,4293]}},
+ {id:"parkmeadows",county:"Douglas County",name:"Park Meadows",x:"County Line rd & Yosemite St",lat:39.5662,lng:-104.8836,r:{1:[7610,9015,3.45,3981,34.7,143045,115481,75941,2275,1750,29420,1671],2:[34010,36779,1.58,15132,37.2,169726,128133,75781,10348,6946,71320,4125],3:[80054,84620,1.12,34166,38.9,183759,134077,78491,24204,16238,125240,7662]}},
+ {id:"parkarap",county:"Arapahoe County",name:"Parker / Arapahoe",x:"Arapahoe Rd & Parker Rd",lat:39.5952,lng:-104.8030,r:{1:[8076,8226,0.37,3365,33.1,139843,104637,57326,1920,1101,5658,450],2:[34211,36137,1.10,12257,37.8,173619,133787,62382,8083,6047,18907,1266],3:[75081,78138,0.80,27217,38.3,168207,131996,61192,17371,11897,43839,2723]}},
+ {id:"parker",county:"Douglas County",name:"Parker",x:"Hilltop Rd & Parker Rd",lat:39.5155,lng:-104.7640,r:{1:[9445,10628,2.39,4142,36.1,135527,99352,58669,2118,1143,11164,1071],2:[36245,39636,1.80,13073,37.5,189532,151031,67884,9350,4867,21986,1783],3:[74438,81565,1.85,27113,37.7,184855,144890,67401,19235,10640,34211,2455]}},
+ {id:"southlands",county:"Arapahoe County",name:"Southlands",x:"E Smoky Hill Rd & E-470 S, Aurora, Colorado, 80016",lat:39.6040,lng:-104.7130,approx:true,r:{1:[15569,15977,0.52,5473,36.5,186760,154266,63988,3356,2395,6883,551],2:[52554,54059,0.57,17573,37.8,189853,156623,63873,12043,8065,15005,973],3:[91381,96485,1.09,29946,38.4,196665,161513,64590,21590,15012,23378,1406]}},
+ {id:"southwest",county:"Jefferson County",name:"Southwest Plaza area",x:"Bowles Ave & Wadsworth Blvd",lat:39.6117,lng:-105.0814,r:{1:[9970,10300,0.65,4234,43.6,162228,119525,68158,2691,1804,8205,562],2:[47591,48128,0.22,19142,42.3,158228,119691,64118,12270,7115,19671,1456],3:[106812,107969,0.22,41298,42.3,169590,128267,66086,28579,14795,37089,2674]}},
+ {id:"aspengrove",county:"Arapahoe County",name:"Aspen Grove",x:"Mineral Ave & Santa Fe Dr",lat:39.5803,lng:-105.0263,r:{1:[9503,10638,2.28,4990,46.3,162900,123103,85244,3184,2168,11038,672],2:[39486,42098,1.29,17163,44.5,181181,141062,78593,11625,8039,32509,2173],3:[91400,94404,0.65,36929,43.1,186837,144774,75651,26942,17272,48036,3229]}},
+ {id:"castlerock",county:"Douglas County",name:"Castle Rock",x:"Meadows Pkwy & Santa Fe Dr",lat:39.4125,lng:-104.8810,approx:true,r:{1:[6247,7023,2.37,2686,39.4,119992,92101,52328,1470,698,8688,843],2:[22797,25475,2.25,9045,40.0,165603,127333,65310,5389,3023,13954,1288],3:[54895,61323,2.24,19976,37.6,188452,149317,68573,13563,7089,26476,2027],5:[91810,102069,2.14,32371,38.1,204553,158926,73005,24392,12482,37880,2593],7:[114659,127825,2.20,40297,38.8,214709,166778,75881,31000,16587,44086,3018],10:[165588,184982,2.24,57873,39.9,220225,173549,77258,45543,25569,56955,3796]}}
+];
+const MI=1609.344;
+function rec(s,r){const a=s.r[r];if(!a)return null;const o={};F.forEach((k,i)=>o[k]=a[i]);o.degree=o.bach+o.grad;return o}
+const fmt={
+ money:v=>"$"+Math.round(v/1000)+"k", moneyFull:v=>"$"+v.toLocaleString("en-US"),
+ int:v=>v.toLocaleString("en-US"), pct:v=>v.toFixed(2)+"%", age:v=>v.toFixed(1)
+};
+const MET={medInc:["Median HH income",fmt.money],avgInc:["Avg HH income",fmt.money],perCap:["Per capita income",fmt.money],pop:["Population",fmt.int],hh:["Households",fmt.int],growth:["Pop. growth / yr",fmt.pct],degree:["Bachelor's + grad",fmt.int],emp:["Daytime employees",fmt.int],medAge:["Median age",fmt.age]};
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const dark=()=>matchMedia("(prefers-color-scheme: dark)").matches&&document.documentElement.dataset.theme!=="light"||document.documentElement.dataset.theme==="dark";
+
+// ---- St. Louis benchmark match scores (3-mile ring, Esri 2025 Market Profiles) ----
+// Degree share = (bachelor's + graduate) / total population, so it is defined the same way for both data sets.
+const BENCH={
+  matchDP:{name:"Des Peres",x:"1183 Colonnade Ctr, Des Peres, MO 63131",
+    avgInc:217325,medInc:149150,perCap:86490,pop:57139,hh:22614,medAge:44.1,growth:-0.06,degShare:(0.396+0.370)*39731/57139},
+  matchSH:{name:"Sunset Hills",x:"3828 S. Lindbergh Blvd, Sunset Hills, MO 63127",
+    avgInc:160863,medInc:116024,perCap:66453,pop:61493,hh:25375,medAge:44.3,growth:0.12,degShare:(0.366+0.264)*43477/61493},
+  matchCL:{name:"Clayton",x:"8027 Clayton Rd, Clayton, MO 63117",
+    avgInc:167605,medInc:97072,perCap:76197,pop:111699,hh:50521,medAge:36.9,growth:-0.08,degShare:(0.346+0.373)*77383/111699}
+};
+const BKEYS=Object.keys(BENCH);
+// Weights: income carries the most (three measures), then education and age, then household size, scale and growth.
+const FEATS=[
+  ["avgInc","Avg HH income",1],["medInc","Median HH income",1],["perCap","Per capita income",1],
+  ["degShare","Degree share",1.5],["medAge","Median age",1],["hhSize","Avg household size",.75],
+  ["logPop","Population (log)",.75],["growth","Pop. growth / yr",.5]
+];
+function featOf(o){return{avgInc:o.avgInc,medInc:o.medInc,perCap:o.perCap,degShare:o.degShare??(o.bach+o.grad)/o.pop,medAge:o.medAge,hhSize:o.pop/o.hh,logPop:Math.log(o.pop),growth:o.growth}}
+const SCORES={};
+(function(){
+  const fs=SITES.map(s=>({id:s.id,f:featOf(rec(s,3))}));
+  const sd={};FEATS.forEach(([k])=>{const v=fs.map(x=>x.f[k]),m=v.reduce((a,b)=>a+b)/v.length;sd[k]=Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/v.length)||1});
+  Object.entries(BENCH).forEach(([key,b])=>{
+    const bf=featOf(b);
+    const d=fs.map(x=>({id:x.id,d:Math.sqrt(FEATS.reduce((a,[k,,w])=>a+w*((x.f[k]-bf[k])/sd[k])**2,0))}));
+    const lo=Math.min(...d.map(x=>x.d)),hi=Math.max(...d.map(x=>x.d));
+    d.forEach(x=>{(SCORES[x.id]??={})[key]=Math.round((1+9*(hi-x.d)/(hi-lo))*10)/10});
+  });
+})();
+const fmtScore=v=>v.toFixed(1)+"/10";
+BKEYS.forEach(k=>MET[k]=["Match: "+BENCH[k].name,fmtScore]);
+const val=(s,r,m)=>m.startsWith("match")?SCORES[s.id][m]:rec(s,r)[m];
+
+let state={metric:"medInc",radius:3,sel:null};
+try{const s=JSON.parse(localStorage.getItem("ta-state")||"{}");if(s.metric&&MET[s.metric])state.metric=s.metric;if([1,2,3].includes(s.radius))state.radius=s.radius}catch(e){}
+function save(){try{localStorage.setItem("ta-state",JSON.stringify({metric:state.metric,radius:state.radius}))}catch(e){}}
+
+const map=L.map("map",{zoomControl:true}).setView([39.62,-104.93],10);
+// All keyless tile sources (CARTO now watermarks tiles without an API key)
+const USGS='<a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>';
+const BASES={
+  "Streets":L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors"}),
+  "USGS streets & topo":L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",{maxZoom:16,attribution:USGS}),
+  "USGS satellite + labels":L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}",{maxZoom:16,attribution:USGS}),
+  "Satellite":L.layerGroup([
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Imagery &copy; Esri, Maxar, Earthstar Geographics"}),
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",{maxZoom:19}),
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,opacity:.8})
+  ]),
+  "Gray":L.layerGroup([
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",{maxZoom:16,attribution:"Tiles &copy; Esri"}),
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",{maxZoom:16})
+  ])
+};
+let baseName="Streets";
+try{const b=localStorage.getItem("ta-base");if(b&&BASES[b])baseName=b}catch(e){}
+BASES[baseName].addTo(map);
+const layerCtl=L.control.layers(BASES,null,{position:"topright",collapsed:false}).addTo(map);
+map.on("baselayerchange",e=>{try{localStorage.setItem("ta-base",e.name)}catch(_){}});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>render());
+// If map tiles can't load (e.g. viewing inside an app preview), say so
+let tileOk=0,tileErr=0;
+function watch(l){(l.eachLayer?l.eachLayer.bind(l):f=>f(l))(t=>{t.on("tileload",()=>{tileOk++;document.getElementById("tilewarn").hidden=true});t.on("tileerror",()=>{tileErr++;if(tileOk===0&&tileErr>4)document.getElementById("tilewarn").hidden=false})})}
+Object.values(BASES).forEach(watch);
+
+// City & County of Denver boundary (merged from Denver's 78 statistical neighborhoods)
+const DENVER_GEO={"type":"Polygon","coordinates":[[[-105.10997,39.62708],[-105.10991,39.63507],[-105.09116,39.63508],[-105.0911,39.6387],[-105.08142,39.63871],[-105.08147,39.63627],[-105.08128,39.63616],[-105.08032,39.6362],[-105.07997,39.63663],[-105.07948,39.63673],[-105.07724,39.6364],[-105.07525,39.6365],[-105.07417,39.63677],[-105.0733,39.63655],[-105.07323,39.63864],[-105.07691,39.63864],[-105.07682,39.63959],[-105.07604,39.64111],[-105.07585,39.64211],[-105.07455,39.64413],[-105.07413,39.64456],[-105.07239,39.6454],[-105.07218,39.64565],[-105.07212,39.64599],[-105.06327,39.646],[-105.06319,39.64963],[-105.05713,39.64969],[-105.05707,39.65123],[-105.05361,39.65119],[-105.05372,39.65136],[-105.05476,39.65162],[-105.05522,39.65196],[-105.05706,39.65197],[-105.05707,39.65283],[-105.05801,39.65285],[-105.05804,39.65146],[-105.05821,39.65144],[-105.05822,39.65125],[-105.06198,39.65123],[-105.06201,39.65149],[-105.06255,39.65149],[-105.0626,39.65028],[-105.06386,39.65029],[-105.0639,39.64963],[-105.07082,39.64962],[-105.07082,39.65001],[-105.0699,39.65001],[-105.06912,39.65131],[-105.06805,39.65222],[-105.06804,39.65249],[-105.06752,39.65252],[-105.06752,39.65325],[-105.06725,39.65329],[-105.06728,39.65686],[-105.07016,39.65687],[-105.07007,39.65907],[-105.07197,39.6596],[-105.07201,39.66001],[-105.07667,39.65933],[-105.07669,39.65991],[-105.07826,39.6607],[-105.07922,39.66199],[-105.08138,39.66199],[-105.0814,39.67015],[-105.08052,39.6699],[-105.07927,39.66976],[-105.07923,39.66935],[-105.07838,39.66935],[-105.07676,39.66909],[-105.07671,39.66942],[-105.07603,39.66933],[-105.07591,39.66999],[-105.07529,39.67005],[-105.07493,39.67047],[-105.07449,39.67022],[-105.07299,39.66978],[-105.07271,39.66979],[-105.07252,39.66941],[-105.072,39.66934],[-105.07195,39.66778],[-105.05323,39.66783],[-105.05324,39.67502],[-105.06261,39.67501],[-105.06262,39.67929],[-105.06139,39.67823],[-105.06099,39.67802],[-105.06034,39.67793],[-105.05782,39.67867],[-105.05781,39.68227],[-105.05324,39.68234],[-105.05324,39.73306],[-105.05442,39.7331],[-105.05443,39.73361],[-105.05472,39.73372],[-105.05501,39.73369],[-105.05501,39.7331],[-105.0556,39.7331],[-105.05559,39.73491],[-105.05323,39.73497],[-105.05324,39.78377],[-105.06266,39.78385],[-105.06266,39.78832],[-105.0649,39.78836],[-105.0649,39.79032],[-105.06433,39.79034],[-105.06431,39.79108],[-105.06265,39.79108],[-105.06262,39.79052],[-105.06183,39.7905],[-105.06148,39.79108],[-105.03456,39.79114],[-105.03452,39.79205],[-105.02996,39.79203],[-105.02991,39.79113],[-105.02529,39.79111],[-105.02526,39.79396],[-105.02443,39.79407],[-105.02351,39.79349],[-105.02287,39.79341],[-105.02219,39.79381],[-105.02182,39.79455],[-105.02105,39.79436],[-105.02149,39.79332],[-105.02056,39.79301],[-105.0205,39.79109],[-104.99329,39.79103],[-104.99323,39.79204],[-104.99066,39.79204],[-104.99028,39.79152],[-104.99022,39.79103],[-104.98643,39.79104],[-104.98638,39.79187],[-104.9858,39.79187],[-104.98576,39.79167],[-104.9852,39.79167],[-104.98516,39.79104],[-104.97821,39.79105],[-104.97817,39.79188],[-104.97772,39.79188],[-104.97768,39.79106],[-104.97602,39.79105],[-104.97596,39.79243],[-104.97307,39.79245],[-104.97307,39.79406],[-104.97467,39.7941],[-104.97468,39.79569],[-104.9712,39.79568],[-104.97118,39.79612],[-104.97166,39.79614],[-104.97165,39.79832],[-104.96863,39.7983],[-104.96864,39.79324],[-104.96754,39.79321],[-104.96793,39.79184],[-104.96831,39.79184],[-104.96876,39.79144],[-104.96873,39.79104],[-104.96019,39.79103],[-104.95543,39.79465],[-104.94048,39.79461],[-104.94045,39.79098],[-104.92695,39.79104],[-104.92695,39.78378],[-104.90356,39.78382],[-104.90355,39.79839],[-104.90144,39.7984],[-104.90142,39.8002],[-104.89907,39.8002],[-104.89902,39.79839],[-104.88447,39.79839],[-104.8844,39.81282],[-104.86626,39.81285],[-104.86617,39.79841],[-104.82809,39.7982],[-104.79086,39.7983],[-104.79097,39.81286],[-104.79067,39.82726],[-104.79082,39.84182],[-104.76236,39.8418],[-104.76228,39.84541],[-104.73095,39.84523],[-104.73036,39.89615],[-104.7033,39.89597],[-104.70315,39.90695],[-104.69212,39.90688],[-104.69201,39.91421],[-104.67954,39.9141],[-104.6796,39.90704],[-104.63091,39.90668],[-104.63087,39.89942],[-104.59954,39.89907],[-104.59977,39.88133],[-104.6051,39.88135],[-104.60522,39.87314],[-104.61911,39.87321],[-104.6197,39.82687],[-104.64027,39.82697],[-104.64031,39.82259],[-104.65533,39.82269],[-104.65548,39.81309],[-104.66616,39.81317],[-104.66608,39.82289],[-104.76246,39.82345],[-104.76265,39.81286],[-104.76266,39.79835],[-104.73437,39.79831],[-104.7346,39.76922],[-104.75343,39.76928],[-104.76457,39.76919],[-104.76458,39.77156],[-104.77218,39.7715],[-104.77221,39.77641],[-104.78153,39.77643],[-104.78158,39.7728],[-104.82812,39.77279],[-104.82817,39.76916],[-104.83284,39.76917],[-104.83287,39.76637],[-104.83557,39.76692],[-104.83759,39.76716],[-104.85639,39.76855],[-104.85633,39.75814],[-104.85548,39.75781],[-104.85497,39.75793],[-104.85482,39.75786],[-104.85431,39.75807],[-104.85345,39.75764],[-104.85202,39.75734],[-104.85078,39.75677],[-104.84822,39.75643],[-104.84801,39.75547],[-104.84773,39.75526],[-104.84687,39.75523],[-104.84686,39.75472],[-104.86602,39.75482],[-104.87992,39.75473],[-104.87994,39.74745],[-104.88465,39.74742],[-104.88471,39.73057],[-104.88528,39.72992],[-104.88648,39.72914],[-104.88473,39.7279],[-104.882,39.72507],[-104.88074,39.72559],[-104.87533,39.72558],[-104.87534,39.71928],[-104.87523,39.71923],[-104.87511,39.71884],[-104.87473,39.71848],[-104.87425,39.71833],[-104.87064,39.71831],[-104.87066,39.70997],[-104.86597,39.71105],[-104.86597,39.7039],[-104.86859,39.70311],[-104.8688,39.70287],[-104.86946,39.7013],[-104.86997,39.70088],[-104.87065,39.70062],[-104.87061,39.69837],[-104.86822,39.69838],[-104.86821,39.70018],[-104.86715,39.70018],[-104.86712,39.69928],[-104.86597,39.69928],[-104.86596,39.69656],[-104.87531,39.69656],[-104.87534,39.69843],[-104.87767,39.69845],[-104.87773,39.69656],[-104.89404,39.69659],[-104.89409,39.69589],[-104.89477,39.69589],[-104.8948,39.69659],[-104.89682,39.6966],[-104.89916,39.69537],[-104.90038,39.69655],[-104.89981,39.69718],[-104.90348,39.69849],[-104.9035,39.69662],[-104.9001,39.69296],[-104.9035,39.69297],[-104.9035,39.68937],[-104.89884,39.68934],[-104.89882,39.69072],[-104.89825,39.69078],[-104.89883,39.69143],[-104.89884,39.69296],[-104.8942,39.69298],[-104.89408,39.69289],[-104.89406,39.68572],[-104.88933,39.68568],[-104.88931,39.68206],[-104.89403,39.68205],[-104.89406,39.67845],[-104.90353,39.67848],[-104.90352,39.68474],[-104.90512,39.68571],[-104.90515,39.68393],[-104.9046,39.6839],[-104.90459,39.68027],[-104.90805,39.68027],[-104.90809,39.67984],[-104.90698,39.67981],[-104.90697,39.67879],[-104.90523,39.67827],[-104.90354,39.67676],[-104.90351,39.66761],[-104.89402,39.66759],[-104.89021,39.66451],[-104.88845,39.66564],[-104.88907,39.66579],[-104.88974,39.66635],[-104.89046,39.66758],[-104.88516,39.66757],[-104.87952,39.66394],[-104.87622,39.66393],[-104.87579,39.66431],[-104.87554,39.66489],[-104.8754,39.66881],[-104.87637,39.67112],[-104.87746,39.67207],[-104.87544,39.67209],[-104.87542,39.67479],[-104.87062,39.67478],[-104.86597,39.67095],[-104.866,39.66028],[-104.85642,39.66029],[-104.85577,39.66048],[-104.85559,39.66029],[-104.85492,39.66029],[-104.85168,39.65945],[-104.84863,39.65908],[-104.84855,39.65708],[-104.84725,39.65707],[-104.84862,39.6566],[-104.85231,39.65577],[-104.85405,39.65515],[-104.8682,39.64707],[-104.87006,39.64628],[-104.87119,39.64623],[-104.87304,39.64583],[-104.87557,39.64498],[-104.87546,39.65167],[-104.87669,39.65305],[-104.88007,39.65305],[-104.88033,39.64132],[-104.88508,39.63894],[-104.88526,39.62413],[-104.91341,39.62408],[-104.91324,39.63865],[-104.92249,39.64585],[-104.93187,39.64583],[-104.93174,39.65306],[-104.95496,39.65309],[-104.9544,39.65579],[-104.95353,39.6559],[-104.95378,39.65669],[-104.95945,39.65672],[-104.95946,39.66158],[-104.96303,39.66158],[-104.96304,39.66038],[-104.96883,39.66043],[-104.96881,39.66583],[-104.97346,39.66586],[-104.97349,39.66767],[-105.00019,39.66767],[-105.00298,39.66678],[-105.00379,39.6662],[-105.00487,39.66367],[-105.00505,39.66363],[-105.00494,39.6615],[-105.00456,39.66054],[-105.01089,39.66057],[-105.00766,39.66473],[-105.00636,39.66771],[-105.00636,39.6767],[-105.0087,39.67675],[-105.00875,39.67862],[-105.0157,39.67865],[-105.01583,39.66051],[-105.02297,39.66049],[-105.02302,39.6568],[-105.03249,39.65687],[-105.03207,39.65631],[-105.0321,39.65328],[-105.03461,39.65324],[-105.03464,39.64593],[-105.03436,39.64588],[-105.03443,39.64383],[-105.03275,39.64379],[-105.03276,39.64285],[-105.02998,39.64282],[-105.02998,39.6423],[-105.02988,39.64226],[-105.03004,39.63863],[-105.0347,39.63859],[-105.03474,39.6332],[-105.03006,39.63316],[-105.03005,39.63294],[-105.02963,39.63237],[-105.0289,39.63231],[-105.02691,39.63154],[-105.0254,39.63147],[-105.02543,39.62853],[-105.02745,39.62834],[-105.02931,39.62779],[-105.03109,39.6278],[-105.03349,39.62819],[-105.03474,39.6282],[-105.0348,39.62781],[-105.03591,39.62781],[-105.03679,39.62811],[-105.03801,39.62684],[-105.04,39.62803],[-105.04026,39.62774],[-105.04062,39.62798],[-105.04091,39.62775],[-105.04134,39.628],[-105.04171,39.62767],[-105.0423,39.62803],[-105.04278,39.62758],[-105.04415,39.62803],[-105.04416,39.63145],[-105.05341,39.63151],[-105.05336,39.63876],[-105.05881,39.63876],[-105.05882,39.63893],[-105.05925,39.63877],[-105.05926,39.63868],[-105.05906,39.63868],[-105.05983,39.63468],[-105.05706,39.6315],[-105.05343,39.6293],[-105.05345,39.62771],[-105.05578,39.62599],[-105.05581,39.6243],[-105.05348,39.62425],[-105.05352,39.62087],[-105.05433,39.62082],[-105.05535,39.62105],[-105.05627,39.6211],[-105.05725,39.6209],[-105.05737,39.62048],[-105.05649,39.61992],[-105.05708,39.6194],[-105.05816,39.61738],[-105.0581,39.61441],[-105.09701,39.61431],[-105.09703,39.61843],[-105.06509,39.61854],[-105.06509,39.62004],[-105.06566,39.6206],[-105.07365,39.62328],[-105.07612,39.62422],[-105.07468,39.62428],[-105.07627,39.6251],[-105.08023,39.62946],[-105.08097,39.63132],[-105.08371,39.63129],[-105.08371,39.63024],[-105.08169,39.63023],[-105.08175,39.62732],[-105.08381,39.62732],[-105.08381,39.62852],[-105.08553,39.62853],[-105.08563,39.62611],[-105.08739,39.62605],[-105.08742,39.62709],[-105.09113,39.62708],[-105.09119,39.6242],[-105.10754,39.62421],[-105.10753,39.62707],[-105.10997,39.62708]],[[-104.89886,39.68345],[-104.89881,39.6857],[-104.90253,39.68569],[-104.90251,39.68562],[-104.89886,39.68345]],[[-104.90377,39.6268],[-104.90392,39.62678],[-104.90391,39.62422],[-104.90291,39.62418],[-104.9028,39.62433],[-104.90328,39.62595],[-104.90377,39.6268]],[[-104.90825,39.67988],[-104.90822,39.68206],[-104.91091,39.68206],[-104.9109,39.6799],[-104.90825,39.67988]],[[-104.92758,39.67483],[-104.93002,39.67477],[-104.9263,39.66941],[-104.92493,39.66933],[-104.92508,39.66898],[-104.92471,39.66843],[-104.92267,39.66784],[-104.92262,39.66766],[-104.92146,39.66767],[-104.9207,39.66817],[-104.92057,39.66804],[-104.92097,39.66775],[-104.92031,39.66711],[-104.92058,39.66694],[-104.92222,39.6669],[-104.92224,39.66379],[-104.92155,39.66285],[-104.92155,39.66259],[-104.92185,39.66223],[-104.92102,39.66036],[-104.91888,39.66034],[-104.91888,39.65994],[-104.91861,39.65992],[-104.91824,39.65934],[-104.91793,39.65917],[-104.91781,39.65931],[-104.91676,39.65901],[-104.91682,39.65878],[-104.9159,39.65851],[-104.91624,39.65806],[-104.91603,39.65751],[-104.91551,39.65751],[-104.91551,39.65713],[-104.9159,39.65713],[-104.91651,39.65612],[-104.91589,39.65605],[-104.91577,39.65635],[-104.91525,39.65617],[-104.91311,39.65619],[-104.91306,39.6631],[-104.91504,39.66314],[-104.91559,39.66325],[-104.91594,39.66347],[-104.91595,39.66611],[-104.91639,39.66615],[-104.91638,39.66755],[-104.91754,39.66758],[-104.91757,39.67298],[-104.9193,39.67392],[-104.92049,39.67414],[-104.92105,39.67456],[-104.92108,39.67483],[-104.92225,39.67483],[-104.9223,39.67564],[-104.92286,39.6757],[-104.92341,39.67548],[-104.92346,39.67658],[-104.92443,39.67658],[-104.92446,39.67621],[-104.92476,39.67615],[-104.92479,39.67635],[-104.92528,39.67635],[-104.92531,39.67673],[-104.92571,39.67673],[-104.92573,39.67528],[-104.92754,39.67527],[-104.92758,39.67483]],[[-104.94067,39.69656],[-104.94065,39.69476],[-104.94056,39.6948],[-104.94055,39.6954],[-104.93951,39.6954],[-104.93947,39.69476],[-104.93629,39.69477],[-104.93627,39.69653],[-104.93642,39.69658],[-104.93642,39.69784],[-104.93591,39.69784],[-104.93587,39.69659],[-104.92822,39.69663],[-104.92821,39.69838],[-104.9288,39.69842],[-104.92882,39.70022],[-104.93168,39.70021],[-104.93173,39.69842],[-104.93407,39.6984],[-104.93406,39.70017],[-104.93172,39.70022],[-104.93177,39.70032],[-104.93288,39.7003],[-104.93291,39.70131],[-104.93405,39.70131],[-104.93404,39.70376],[-104.93329,39.70377],[-104.93286,39.70361],[-104.93286,39.70206],[-104.93176,39.70206],[-104.9317,39.70386],[-104.92699,39.7039],[-104.92699,39.70668],[-104.92907,39.70679],[-104.92912,39.70641],[-104.92954,39.70641],[-104.92954,39.70856],[-104.93168,39.70913],[-104.9317,39.71109],[-104.94068,39.71105],[-104.9407,39.69777],[-104.94007,39.69773],[-104.94003,39.69793],[-104.93856,39.69793],[-104.93856,39.69666],[-104.94067,39.69656]],[[-104.93303,39.67119],[-104.93298,39.67058],[-104.93175,39.67058],[-104.93172,39.67119],[-104.93161,39.67119],[-104.93156,39.66757],[-104.93045,39.66758],[-104.93043,39.66848],[-104.92927,39.66849],[-104.92925,39.66939],[-104.92807,39.66939],[-104.92805,39.66897],[-104.92725,39.669],[-104.92964,39.67237],[-104.93078,39.67239],[-104.9308,39.6728],[-104.93162,39.67281],[-104.93165,39.67336],[-104.93388,39.67332],[-104.93387,39.67122],[-104.93303,39.67119]],[[-104.92931,39.702],[-104.92926,39.70127],[-104.92837,39.70132],[-104.9292,39.70204],[-104.92931,39.702]],[[-105.0635,39.65289],[-105.06355,39.65187],[-105.06258,39.65187],[-105.06257,39.65288],[-105.0635,39.65289]],[[-105.06486,39.65378],[-105.06488,39.65326],[-105.06398,39.65328],[-105.06401,39.65377],[-105.06486,39.65378]],[[-105.08143,39.63569],[-105.08148,39.63502],[-105.08089,39.63501],[-105.08088,39.63567],[-105.08143,39.63569]]]};
+const limitsLayer=L.layerGroup([
+  L.geoJSON(DENVER_GEO,{interactive:false,style:{color:"#ffffff",weight:7,opacity:.85,fill:false}}),
+  L.geoJSON(DENVER_GEO,{interactive:false,style:{color:"#2b3338",weight:3,dashArray:"10 6",fillColor:"#2b3338",fillOpacity:.05}}),
+  L.marker([39.8030,-104.8000],{interactive:true,icon:L.divIcon({className:"",html:'<span class="citylbl">City &amp; County of Denver · min. wage</span>',iconSize:null,iconAnchor:[100,10]})}).on("click",e=>wagePopup(e.latlng)),
+  // Wide invisible stroke so the boundary line is easy to click
+  L.geoJSON(DENVER_GEO,{style:{color:"#2b3338",weight:20,opacity:0,fill:false}})
+    .on("click",e=>{L.DomEvent.stopPropagation(e);wagePopup(e.latlng)})
+    .bindTooltip("Denver city limits · click for minimum wage",{className:"tt",sticky:true})
+]).addTo(map);
+layerCtl.addOverlay(limitsLayer,"Denver city limits");
+function inDenver(lat,lng){const ring=DENVER_GEO.coordinates[0];let c=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){const [xi,yi]=ring[i],[xj,yj]=ring[j];
+    if((yi>lat)!==(yj>lat)&&lng<(xj-xi)*(lat-yi)/(yj-yi)+xi)c=!c}
+  return c}
+SITES.forEach(s=>s.denver=inDenver(s.lat,s.lng));
+// Minimum wage: Denver's citywide ordinance vs. Colorado statewide (applies in the suburban counties here)
+// Tipped = minimum minus the $3.02/hr tip credit Colorado allows. Hours/yr assumes one full-time employee.
+const WAGE={
+  2026:{den:19.29,co:15.16,denT:16.27,coT:12.14},
+  2027:{den:19.84,co:15.71,denT:16.82,coT:12.69}
+};
+function wageHtml(){
+  const m=v=>"$"+v.toFixed(2);
+  const row=(y,lbl,a,b)=>{const d=a-b;return `<tr><td>${y} ${lbl}</td><td class="hl">${m(a)}</td><td>${m(b)}</td><td>+${m(d)} <small>(+${Math.round(d/b*100)}%)</small></td></tr>`};
+  const ft=y=>Math.round((WAGE[y].den-WAGE[y].co)*2080).toLocaleString("en-US");
+  return `<div class="pop wage"><b class="pn">Minimum wage: inside vs. outside Denver</b>
+  <div class="px">Denver sets its own citywide minimum wage. Outside the city limits, the sites in Jefferson, Arapahoe and Douglas Counties follow the Colorado statewide minimum.</div>
+  <div class="tbl"><table><thead><tr><th></th><th>Denver</th><th>Outside</th><th>Difference</th></tr></thead><tbody>
+  ${row(2026,"standard",WAGE[2026].den,WAGE[2026].co)}
+  ${row(2026,"tipped",WAGE[2026].denT,WAGE[2026].coT)}
+  ${row(2027,"standard",WAGE[2027].den,WAGE[2027].co)}
+  ${row(2027,"tipped",WAGE[2027].denT,WAGE[2027].coT)}
+  </tbody></table></div>
+  <div class="px"><span>What it costs</span>About <b>$${ft(2026)}</b> more per year for each full-time minimum-wage employee (2,080 hrs)${ft(2026)===ft(2027)?". The gap stays the same in 2027.":`, rising to $${ft(2027)} in 2027.`}</div>
+  <div class="px"><span>Sites inside Denver</span>${SITES.filter(s=>s.denver).map(s=>s.name).join(", ")}</div>
+  <div class="pnote">2027 rates take effect Jan. 1, 2027. Tipped rates assume the $3.02 tip credit; Denver's 2027 tipped figure is derived from that credit. Sources: Denver Labor, Colorado Dept. of Labor and Employment.</div></div>`;
+}
+function wagePopup(latlng){L.popup({maxWidth:380,autoPanPadding:[30,30]}).setLatLng(latlng).setContent(wageHtml()).openOn(map)}
+const ringLayer=L.layerGroup().addTo(map), markerLayer=L.layerGroup().addTo(map);
+const markers={};
+
+// Two-color scale: cool blue (low) to hot red (high), blended by rank so each site gets its own shade
+const COOL=[33,102,172],HOT=[215,25,28];
+const mix=q=>"rgb("+COOL.map((c,i)=>Math.round(c+(HOT[i]-c)*q)).join(",")+")";
+function colorFor(v,vals){
+  const sorted=[...vals].sort((a,b)=>a-b);const idx=sorted.indexOf(v);const q=sorted.length>1?idx/(sorted.length-1):1;
+  return mix(q);
+}
+function render(){
+  const m=state.metric,r=state.radius;
+  const rows=SITES.map(s=>({s,v:val(s,r,m)})).sort((a,b)=>b.v-a.v);
+  const vals=rows.map(x=>x.v);
+  // list
+  const list=document.getElementById("list");list.innerHTML="";
+  rows.forEach((x,i)=>{
+    const li=document.createElement("li");li.className="row";li.tabIndex=0;li.setAttribute("aria-current",state.sel===x.s.id);
+    li.innerHTML=`<span class="rank">${i+1}</span><span class="nm"><b>${x.s.name}${x.s.denver?' <em class="chip">Denver</em>':""}</b><span>${x.s.x}</span></span><span class="val">${MET[m][1](x.v)}<span class="dot" style="background:${colorFor(x.v,vals)}"></span></span>`;
+    li.onclick=()=>select(x.s.id,true);li.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(x.s.id,true)}};
+    list.appendChild(li);
+  });
+  // map
+  ringLayer.clearLayers();markerLayer.clearLayers();
+  const ring=css("--ring");
+  SITES.forEach(s=>{
+    const v=val(s,r,m);const isSel=state.sel===s.id;
+    if(isSel){
+      Object.keys(s.r).map(Number).sort((a,b)=>b-a).forEach(mi=>{
+        const c=L.circle([s.lat,s.lng],{radius:mi*MI,color:ring,weight:mi===r?2.5:1.25,dashArray:mi===r?null:"4 4",fillColor:ring,fillOpacity:mi===r?.06:0,interactive:true}).on("click",()=>select(s.id,false)).addTo(ringLayer);
+        L.marker([s.lat+mi*MI/111320,s.lng],{icon:L.divIcon({className:"",html:`<span class="ringlbl">${mi} mi</span>`,iconSize:null,iconAnchor:[16,8]}),interactive:false}).addTo(ringLayer);
+      });
+    }else{
+      L.circle([s.lat,s.lng],{radius:r*MI,color:colorFor(v,vals),weight:3,opacity:1,fillColor:colorFor(v,vals),fillOpacity:.12,interactive:true}).on("click",()=>select(s.id,false)).addTo(ringLayer);
+    }
+    L.marker([s.lat,s.lng],{icon:L.divIcon({className:"",html:`<span class="sitelbl">${s.name}</span>`,iconSize:null,iconAnchor:[-12,9]}),interactive:false}).addTo(markerLayer);
+    const mk=L.circleMarker([s.lat,s.lng],{radius:isSel?12:10,color:"#ffffff",weight:isSel?3.5:2.5,fillColor:colorFor(v,vals),fillOpacity:1})
+      .bindTooltip(`<b>${s.name}</b> · ${MET[m][0]}: ${MET[m][1](v)}`,{className:"tt",direction:"top",offset:[0,-8]})
+      .on("click",()=>select(s.id,false)).addTo(markerLayer);
+    markers[s.id]=mk;
+  });
+  document.querySelectorAll("#radius button").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.r===r));
+  document.getElementById("metric").value=m;
+  renderDetail();
+}
+function renderDetail(){
+  const el=document.getElementById("detail");const s=SITES.find(x=>x.id===state.sel);
+  if(!s){el.innerHTML='<p class="empty">Select a site on the map or in the list to see its 1, 2 and 3 mile demographics.</p>';return}
+  const rs=Object.keys(s.r).map(Number).sort((a,b)=>a-b);const R=rs.map(r=>rec(s,r));
+  const row=(label,key,f)=>`<tr><td>${label}</td>${R.map((o,i)=>`<td class="${rs[i]===state.radius?"hl":""}">${f(o[key])}</td>`).join("")}</tr>`;
+  const sec=t=>`<tr class="sec"><td colspan="${rs.length+1}">${t}</td></tr>`;
+  el.innerHTML=`<div><h2>${s.name}</h2><div class="x">${s.x}${s.approx?" · pin location approximate":""}</div></div>
+  ${s.flag?`<div class="flag">${s.flag}</div>`:""}
+  ${matchBlock(s)}
+  <div class="tbl"><table><thead><tr><th>Radius</th>${rs.map(r=>`<th>${r} mi</th>`).join("")}</tr></thead><tbody>
+  ${sec("Income")}${row("Median HH income","medInc",fmt.moneyFull)}${row("Avg HH income","avgInc",fmt.moneyFull)}${row("Per capita","perCap",fmt.moneyFull)}
+  ${sec("People")}${row("Population 2026","pop",fmt.int)}${row("Population 2031","pop31",fmt.int)}${row("Growth / yr","growth",fmt.pct)}${row("Households","hh",fmt.int)}${row("Median age","medAge",fmt.age)}
+  ${sec("Education")}${row("Bachelor's","bach",fmt.int)}${row("Graduate","grad",fmt.int)}
+  ${sec("Daytime")}${row("Employees","emp",fmt.int)}${row("Businesses","biz",fmt.int)}
+  </tbody></table></div>`;
+}
+// Plain-language comparisons vs a benchmark. Values within the "same" band read as "similar".
+function insights(s,key){
+  const o=rec(s,3),f=featOf(o),b=BENCH[key],bf=featOf(b),n=b.name,out=[];
+  const pctDiff=(a,c)=>(a-c)/c;
+  const rel=(a,c,band)=>{const d=pctDiff(a,c);return Math.abs(d)<=band?0:(d>0?1:-1)};
+  const sign=d=>(d>0?"+":"")+Math.round(d*100)+"%";
+  const add=(dir,txt,detail)=>out.push({dir,txt,detail});
+  let d;
+  d=rel(o.pop,b.pop,.10);add(d,d>0?`More population than ${n}`:d<0?`Less population than ${n}`:`Similar population to ${n}`,`${fmt.int(o.pop)} vs ${fmt.int(b.pop)} (${sign(pctDiff(o.pop,b.pop))})`);
+  d=rel(f.avgInc,bf.avgInc,.05);add(d,d>0?`Wealthier than ${n}`:d<0?`Less wealthy than ${n}`:`Similar wealth to ${n}`,`Avg HH income ${fmt.moneyFull(f.avgInc)} vs ${fmt.moneyFull(bf.avgInc)} (${sign(pctDiff(f.avgInc,bf.avgInc))})`);
+  d=rel(f.medInc,bf.medInc,.05);add(d,d>0?`Higher median income than ${n}`:d<0?`Lower median income than ${n}`:`Similar median income to ${n}`,`${fmt.moneyFull(f.medInc)} vs ${fmt.moneyFull(bf.medInc)} (${sign(pctDiff(f.medInc,bf.medInc))})`);
+  d=rel(f.perCap,bf.perCap,.05);add(d,d>0?`Higher income per person than ${n}`:d<0?`Lower income per person than ${n}`:`Similar income per person to ${n}`,`${fmt.moneyFull(f.perCap)} vs ${fmt.moneyFull(bf.perCap)} (${sign(pctDiff(f.perCap,bf.perCap))})`);
+  const dd=f.degShare-bf.degShare;d=Math.abs(dd)<=.02?0:(dd>0?1:-1);
+  add(d,d>0?`More college-educated than ${n}`:d<0?`Less college-educated than ${n}`:`Similar education to ${n}`,`${(f.degShare*100).toFixed(1)}% vs ${(bf.degShare*100).toFixed(1)}% of residents hold a degree`);
+  const ad=f.medAge-bf.medAge;d=Math.abs(ad)<1?0:(ad>0?1:-1);
+  add(d,d>0?`Older than ${n}`:d<0?`Younger than ${n}`:`Similar age to ${n}`,`Median age ${f.medAge.toFixed(1)} vs ${bf.medAge.toFixed(1)} (${ad>0?"+":""}${ad.toFixed(1)} yrs)`);
+  d=rel(f.hhSize,bf.hhSize,.04);add(d,d>0?`Larger households than ${n}`:d<0?`Smaller households than ${n}`:`Similar household size to ${n}`,`${f.hhSize.toFixed(2)} vs ${bf.hhSize.toFixed(2)} people per household`);
+  const gd=f.growth-bf.growth;d=Math.abs(gd)<.25?0:(gd>0?1:-1);
+  add(d,d>0?`Growing faster than ${n}`:d<0?`Growing slower than ${n}`:`Similar growth to ${n}`,`${fmt.pct(f.growth)} vs ${fmt.pct(bf.growth)} per year`);
+  return out;
+}
+function insightList(s,key,open){
+  const g={1:"▲",0:"●","-1":"▼"};
+  return `<details class="why"${open?" open":""}><summary>vs ${BENCH[key].name}: ${fmtScore(SCORES[s.id][key])}</summary><ul>
+  ${insights(s,key).map(i=>`<li class="d${i.dir}"><span class="g" aria-hidden="true">${g[i.dir]}</span><span><b>${i.txt}</b><small>${i.detail}</small></span></li>`).join("")}
+  </ul></details>`;
+}
+function matchBlock(s){
+  const o=rec(s,3),f=featOf(o),bf=BKEYS.map(k=>featOf(BENCH[k]));
+  const tile=k=>{const v=SCORES[s.id][k];return `<div class="mt"><span>vs ${BENCH[k].name}</span><b>${v.toFixed(1)}<small>/10</small></b><i style="--w:${v*10}%"></i></div>`};
+  const r=(lbl,k,fm)=>`<tr><td>${lbl}</td><td class="hl">${fm(f[k])}</td>${bf.map(b=>`<td>${fm(b[k])}</td>`).join("")}</tr>`;
+  const pc=v=>(v*100).toFixed(1)+"%";
+  return `<div class="match">${BKEYS.map(tile).join("")}</div>
+  <div class="whys">${BKEYS.map(k=>insightList(s,k,true)).join("")}</div>
+  <details class="cmp"><summary>Compare with the St. Louis sites (3 mi)</summary><div class="tbl"><table>
+  <thead><tr><th></th><th>${s.name.split(" /")[0]}</th>${BKEYS.map(k=>`<th>${BENCH[k].name}</th>`).join("")}</tr></thead><tbody>
+  ${r("Avg HH income","avgInc",fmt.moneyFull)}
+  ${r("Median HH income","medInc",fmt.moneyFull)}
+  ${r("Per capita","perCap",fmt.moneyFull)}
+  ${r("Degree share","degShare",pc)}
+  ${r("Median age","medAge",fmt.age)}
+  ${r("Avg HH size","hhSize",v=>v.toFixed(2))}
+  ${r("Population","logPop",v=>fmt.int(Math.round(Math.exp(v))))}
+  ${r("Growth / yr","growth",fmt.pct)}
+  </tbody></table></div></details>`;
+}
+function popupHtml(s){
+  const f3=rec(s,3);
+  const row=(lbl,k,f)=>`<tr><td>${lbl}</td><td class="hl">${f(f3[k])}</td></tr>`;
+  return `<div class="pop"><b class="pn">${s.name}</b>
+  <div class="px"><span>Report crossroads</span>${s.x}</div>
+  <div class="px"><span>Location</span>${s.denver?`Inside Denver city limits · $${WAGE[2026].den.toFixed(2)} min. wage`:`Outside Denver · ${s.county} · $${WAGE[2026].co.toFixed(2)} min. wage`}</div>
+  <table><thead><tr><th></th><th>3 mi</th></tr></thead><tbody>
+  ${row("Avg HH income","avgInc",fmt.moneyFull)}
+  ${row("Total households","hh",fmt.int)}
+  ${row("Bachelor's degrees","bach",fmt.int)}
+  ${row("Population","pop",fmt.int)}
+  </tbody></table>
+  <div class="ptitle">Similarity (1–10, vs. other Denver sites) · tap to drill down</div>
+  ${BKEYS.map(k=>insightList(s,k,false)).join("")}
+</div>`;
+}
+let curPopup=null;
+document.addEventListener("toggle",e=>{if(curPopup&&e.target.closest&&e.target.closest(".leaflet-popup"))curPopup.update()},true);
+function select(id,pan){
+  state.sel=id;render();
+  const s=SITES.find(x=>x.id===state.sel);
+  if(s){
+    curPopup=L.popup({maxWidth:340,autoPanPadding:[30,30]}).setLatLng([s.lat,s.lng]).setContent(Object.assign(document.createElement("div"),{innerHTML:popupHtml(s)})).openOn(map);const maxR=Math.max(...Object.keys(s.r).map(Number));const target=pan?Math.min(maxR,state.radius+1):null;
+    if(pan)map.fitBounds(L.latLng(s.lat,s.lng).toBounds(Math.max(state.radius,3)*MI*2.2));
+    if(innerWidth<=820&&!pan)document.getElementById("detail").scrollIntoView({behavior:"smooth",block:"start"});}
+}
+document.getElementById("metric").onchange=e=>{state.metric=e.target.value;save();render()};
+document.querySelectorAll("#radius button").forEach(b=>b.onclick=()=>{state.radius=+b.dataset.r;save();render()});
+render();
+map.fitBounds(L.latLngBounds(SITES.map(s=>[s.lat,s.lng])).pad(0.15));
+</script>
+</body>
+</html>
